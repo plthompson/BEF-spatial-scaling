@@ -11,7 +11,7 @@ library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(ggExtra)
-
+library(mvtnorm)
 
 #functions####
 matsplitter<-function(M, r1, c1) {
@@ -26,8 +26,33 @@ matsplitter<-function(M, r1, c1) {
   cv
 }
 
+dist.matrix <- function(side)
+{
+  row.coords <- rep(1:side, times=side)
+  col.coords <- rep(1:side, each=side)
+  row.col <- data.frame(row.coords, col.coords)
+  D <- dist(row.col, method="euclidean", diag=TRUE, upper=TRUE)
+  D <- as.matrix(D)
+  return(D)
+}
+
+# function that simulates the autocorrelated 2D array with a given side,
+# and with exponential decay given by lambda
+# (the mean mu is constant over the array, it equals to global.mu)
+cor.surface <- function(side, global.mu, lambda)
+{
+  D <- dist.matrix(side)
+  # scaling the distance matrix by the exponential decay
+  SIGMA <- exp(-lambda*D)
+  mu <- rep(global.mu, times=side*side)
+  # sampling from the multivariate normal distribution
+  M <- matrix(nrow=side, ncol=side)
+  M[] <- rmvnorm(1, mu, SIGMA)
+  return(M)
+}
+
 #model function####
-BEF_spat_scale<-function(disp=0,Int_type="Comp",nSpecies=40,spat_auto_corr=1){
+BEF_spat_scale<-function(disp=0,Int_type="Comp",nSpecies=40){
   burn<-500
   Tmax<-burn #length of simulation 1000 is enough to reach equilibrium
   
@@ -53,24 +78,15 @@ BEF_spat_scale<-function(disp=0,Int_type="Comp",nSpecies=40,spat_auto_corr=1){
     pred<-(nSpecies-nPred+1):(nSpecies)
   }
   
-  #environmental gradients
-  Env1<-matrix(seq(1,nCom_rows),nCom_rows,nCom_rows)
-  Env2<-matrix(rep(seq(1,nCom_cols),each=nCom_cols),nCom_cols,nCom_cols)
-  
-  Env<-data.frame(Env1=c(Env1),Env2=c(Env2))
-  if(spat_auto_corr!=1){
-    Env<-Env[sample(1:nCom,replace = F),]
-  }
-  
-  
   #species environmental niches
-  Opt1<-c(seq(1-10,max(Env1)+10,length=nPrey), seq(1,max(Env1),length=nHerb),seq(1,max(Env1),length=nPred))
-  T_Norm<-apply(t(Opt1),2,dnorm,sd=50,x=seq(1,max(Env1)))*300
+  #Opt1<-c(seq(1-10,nCom_rows+10,length=nPrey), seq(1,nCom_rows,length=nHerb),seq(1,nCom_rows,length=nPred))
+  Opt1<-c(runif(n = nPrey,min = 1-10,max=nCom_rows+10),runif(n = nHerb,min = 1-10,max=nCom_rows+10),runif(n = nPred,min = 1-10,max=nCom_rows+10))
+  T_Norm<-apply(t(Opt1),2,dnorm,sd=50,x=seq(1,nCom_rows))*300
   A1<-(T_Norm-max(T_Norm))
   
-  
-  Opt2<-c(seq(1-5,max(Env1)+5,length=nPrey)[sample(nPrey,replace = F)], seq(1,max(Env2),length=nHerb)[sample(nHerb,replace = F)],seq(1,max(Env2),length=nPred)[sample(nPred,replace = F)])
-  T_Norm<-apply(t(Opt2),2,dnorm,sd=50,x=seq(1,max(Env2)))*300
+  #Opt2<-c(seq(1-10,nCom_rows+10,length=nPrey)[sample(nPrey,replace = F)], seq(1,nCom_rows,length=nHerb)[sample(nHerb,replace = F)],seq(1,nCom_rows,length=nPred)[sample(nPred,replace = F)])
+  Opt2<-c(runif(n = nPrey,min = 1-10,max=nCom_rows+10),runif(n = nHerb,min = 1-10,max=nCom_rows+10),runif(n = nPred,min = 1-10,max=nCom_rows+10))
+  T_Norm<-apply(t(Opt2),2,dnorm,sd=50,x=seq(1,nCom_rows))*300
   A2<-(T_Norm-max(T_Norm))
   
   traits<-cbind(Opt1,Opt2)
@@ -132,56 +148,82 @@ BEF_spat_scale<-function(disp=0,Int_type="Comp",nSpecies=40,spat_auto_corr=1){
   disp_mat<-matrix(1/(nCom-1),nCom,nCom)
   diag(disp_mat)<-0
   
-  #model####
-  X=array(NA,dim=c(nCom,nSpecies,Tmax))
-  X[,,1]<-10
-  X_outside<-rep(0,nCom*nSpecies)
-  X_outside[1:round(nSpecies*nCom*0.0005)]<-0.005
-  X_inside<-rep(0,nCom*nSpecies)
-  X_inside[1:round(nSpecies*nCom*0.1)]<-1
-  hold<-X[,,1]
-  
-  for(l in 1:(Tmax-1)){
-    X[,,l+1]<-X[,,l]*exp(rep(C1,nCom)+X[,,l]%*%B+A1[Env$Env1,]+A2[Env$Env2,])+(disp_mat%*%X[,,l])*disp-X[,,l]*disp
-    X[,,l+1][(X[,,l+1]<10^-2.5)]<-0
-    print(l)
-  }
-  X_final<-X[,,Tmax]
-  
-  sizes<-c(1,4,16,25,100,400)
-  for(i in 1:length(sizes)){
-    mats<-matsplitter(matrix(1:400,20,20),r1=sizes[i],c1 =sizes[i])
-    for(j in 1:dim(mats)[3]){
-      X_sub<-X_final[c(mats[,,j]),]
-      if(i==1){
-        data.sub<-data.frame(scale=sizes[i],SR=sum(X_sub>0),Biomass=sum(X_sub))
-      } else{
-        data.sub<-data.frame(scale=sizes[i],SR=sum(colSums(X_sub)>0),Biomass=sum(X_sub))
+  autocorr<-c(1,0.95,0.9,0.5,0)
+  for(ac in autocorr){
+    
+    #environmental gradients
+    Env<-data.frame(Env1=seq(1:nCom_rows),Env2=rep(1:nCom_cols,each=nCom_rows))
+    Env_spatial<-Env
+    
+    rand_env<-(1-autocorr)*nCom
+    rand_patches<-sample(x = nCom,size = rand_env,replace = F)
+    re_random_patches<-sample(x = rand_env,size = rand_env,replace=F)
+    
+    Env[rand_patches,]<-Env[rand_patches,][re_random_patches,]
+    
+    # if(lambda=="random"){
+    #   Env <- data.frame(Env1=c(decostand(matrix(rnorm(nCom), nrow=nCom_rows, ncol=nCom_rows),method="range")),
+    #                     Env2=c(decostand(matrix(rnorm(nCom), nrow=nCom_rows, ncol=nCom_rows),method="range")))
+    # } else {  Env <- data.frame(Env1=c(decostand(cor.surface(side=nCom_rows, lambda=as.numeric(lambda), global.mu=0),method = "range")),
+    #                             Env2=c(decostand(cor.surface(side=nCom_rows, lambda=as.numeric(lambda), global.mu=0),method = "range")))
+    # }
+    # Env<-1+Env*19
+    
+    #model####
+    X=array(NA,dim=c(nCom,nSpecies,Tmax))
+    X[,,1]<-10
+    X_outside<-rep(0,nCom*nSpecies)
+    X_outside[1:round(nSpecies*nCom*0.0005)]<-0.005
+    X_inside<-rep(0,nCom*nSpecies)
+    X_inside[1:round(nSpecies*nCom*0.1)]<-1
+    hold<-X[,,1]
+    
+    for(l in 1:(Tmax-1)){
+      X[,,l+1]<-X[,,l]*exp(rep(C1,nCom)+X[,,l]%*%B+A1[Env$Env1,]+A2[Env$Env2,])+(disp_mat%*%X[,,l])*disp-X[,,l]*disp
+      X[,,l+1][(X[,,l+1]<10^-2.5)]<-0
+      #print(l)
+    }
+    X_final<-X[,,Tmax]
+    
+    sizes<-c(1,4,16,25,100,400)
+    for(i in 1:length(sizes)){
+      mats<-matsplitter(matrix(1:400,20,20),r1=sizes[i],c1 =sizes[i])
+      for(j in 1:dim(mats)[3]){
+        X_sub<-X_final[c(mats[,,j]),]
+        if(i==1){
+          data.sub<-data.frame(scale=sizes[i],SR=sum(X_sub>0),Biomass=sum(X_sub))
+        } else{
+          data.sub<-data.frame(scale=sizes[i],SR=sum(colSums(X_sub)>0),Biomass=sum(X_sub))
+        }
+        data.sub$autocorr<-ac
+        if(i==1 & j==1 & ac == autocorr[1]){
+          results.df<-data.sub
+        } else {results.df<-rbind(results.df,data.sub)}
       }
-      if(i==1 & j==1 ){
-        results.df<-data.sub
-      } else {results.df<-rbind(results.df,data.sub)}
     }
   }
   return(results.df)
 }
 
 #run model over range of gamma diversity####
-G_div<-c(2,5,10,20,40,80,160)
-for(ac in c(0,1)){
+G_div<-80#c(2,5,10,20,40,80,160)
+reps<-10
+for(r in 1:reps){
+  print(r)
   for(g in G_div){
-    hold<-BEF_spat_scale(nSpecies = g,spat_auto_corr = ac)
+    hold<-BEF_spat_scale(nSpecies = g)
     hold$Gamma<-g
-    hold$AC<-ac
-    if(g==G_div[1] & ac==0){
+    hold$rep<-r
+    if(g==G_div[1] & r==1){
       results.df<-hold
     } else {results.df<-rbind(results.df,hold)}
   }
 }
 
-results.df$Autocorrelated<-as.factor(results.df$AC==1)
+results.df$autocorr_f<-as.factor(results.df$autocor)
 
-ggplot(results.df,aes(x=SR,y=Biomass,group=Autocorrelated,color=Autocorrelated))+
+
+ggplot(results.df,aes(x=SR,y=Biomass,group=autocor,color=autocorr_f))+
   geom_point()+
   facet_grid(~scale)+
   geom_smooth(method = 'lm',formula = y ~ poly(x,2))+
@@ -190,7 +232,7 @@ ggplot(results.df,aes(x=SR,y=Biomass,group=Autocorrelated,color=Autocorrelated))
   xlab("Species richness")
 ggsave(filename = "./figures/BEF curves - raw.pdf",width = 13,height = 4)
 
-ggplot(results.df,aes(x=SR,y=Biomass,group=Autocorrelated,color=Autocorrelated))+
+ggplot(results.df,aes(x=SR,y=Biomass,group=autocorr,color=autocorr_f))+
   geom_point()+
   facet_grid(~scale)+
   geom_smooth(method = 'lm',formula = y ~ x)+
@@ -202,16 +244,54 @@ ggplot(results.df,aes(x=SR,y=Biomass,group=Autocorrelated,color=Autocorrelated))
 ggsave(filename = "./figures/BEF curves.pdf",width = 13,height = 4)
 
 slopes.df<-results.df %>%
-  group_by(scale,Autocorrelated) %>% # You can add here additional grouping variables if your real data set enables it
+  group_by(scale,autocorr_f) %>% # You can add here additional grouping variables if your real data set enables it
   do(mod = lm(log(Biomass+1) ~ log(SR+1), data = .)) %>%
   mutate(Slope = summary(mod)$coeff[2]) %>%
   select(-mod)
 
-ggplot(slopes.df,aes(x=scale,y=Slope,group=Autocorrelated,color=Autocorrelated))+
+ggplot(slopes.df,aes(x=scale,y=Slope,group=autocorr_f,color=autocorr_f))+
   geom_point()+
   theme_bw()+
   scale_x_log10()+
   geom_smooth(method = 'lm',formula = y~poly(x,2))+
   removeGrid()+
   xlab("Spatial scale")
-ggsave(filename = "./figures/BEF slope by scale.pdf",width = 6,height = 4)
+ggsave(filename = "./figures/BEF slope by scale - new method.pdf",width = 6,height = 4)
+
+#at just one level of gamma####
+ggplot(filter(results.df,Gamma==80),aes(x=SR,y=Biomass,group=autocorr_f,color=autocorr_f))+
+  geom_point()+
+  facet_wrap(~scale,scales = "free")+
+  geom_smooth(method = 'lm',formula = y ~ poly(x,2))+
+  theme_bw()+
+  removeGrid()+
+  xlab("Species richness")
+
+ggplot(results.df,aes(x=SR,y=Biomass,group=autocorr_f,color=autocorr_f))+
+  geom_point()+
+  facet_wrap(~scale,scales = "free")+
+  geom_smooth(method = 'lm',formula = y ~ x)+
+  theme_bw()+
+  scale_x_log10()+
+  scale_y_log10()+
+  removeGrid()+
+  xlab("Species richness")
+
+slopes.df<-results.df %>%
+  group_by(scale,autocorr_f) %>% # You can add here additional grouping variables if your real data set enables it
+  do(mod = lm(log(Biomass+1) ~ log(SR+1), data = .)) %>%
+  mutate(Slope = summary(mod)$coeff[2]) %>%
+  select(-mod)
+
+ggplot(slopes.df,aes(x=scale,y=Slope,group=autocorr_f,color=autocorr_f))+
+  geom_point()+
+  theme_bw()+
+  scale_x_log10()+
+  geom_smooth(method = 'lm',formula = y~poly(x,2))+
+  removeGrid()+
+  xlab("Spatial scale")
+
+ggplot(results.df,aes(x=autocorr,y=Biomass))+
+  geom_point()+
+  facet_wrap(~scale,scales = "free")
+
