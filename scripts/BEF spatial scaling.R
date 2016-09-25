@@ -98,7 +98,7 @@ BEF_spat_scale<-function(disp=0,Int_type="Comp",nSpecies=40){
   
   if(Int_type=="Comp" | Int_type=="NoInt"){
     b11=-.15 #mean interspecific competition strength
-    bdiag1=-.05 #intraspecific competition strength
+    bdiag1=-.02 #intraspecific competition strength
     BB=b11*matrix(runif(nPrey*nPrey),nPrey,nPrey)
     BB=weight*BB
     diag(BB)<-bdiag1
@@ -148,14 +148,14 @@ BEF_spat_scale<-function(disp=0,Int_type="Comp",nSpecies=40){
   disp_mat<-matrix(1/(nCom-1),nCom,nCom)
   diag(disp_mat)<-0
   
-  autocorr<-c(1,0.95,0.9,0.5,0)
-  for(ac in autocorr){
+  autocorrV<-c(1,0.95,0.9,0.5,0)
+  for(ac in autocorrV){
     
     #environmental gradients
     Env<-data.frame(Env1=seq(1:nCom_rows),Env2=rep(1:nCom_cols,each=nCom_rows))
     Env_spatial<-Env
     
-    rand_env<-(1-autocorr)*nCom
+    rand_env<-(1-ac)*nCom
     rand_patches<-sample(x = nCom,size = rand_env,replace = F)
     re_random_patches<-sample(x = rand_env,size = rand_env,replace=F)
     
@@ -196,7 +196,7 @@ BEF_spat_scale<-function(disp=0,Int_type="Comp",nSpecies=40){
           data.sub<-data.frame(scale=sizes[i],SR=sum(colSums(X_sub)>0),Biomass=sum(X_sub))
         }
         data.sub$autocorr<-ac
-        if(i==1 & j==1 & ac == autocorr[1]){
+        if(i==1 & j==1 & ac == autocorrV[1]){
           results.df<-data.sub
         } else {results.df<-rbind(results.df,data.sub)}
       }
@@ -206,7 +206,7 @@ BEF_spat_scale<-function(disp=0,Int_type="Comp",nSpecies=40){
 }
 
 #run model over range of gamma diversity####
-G_div<-80#c(2,5,10,20,40,80,160)
+G_div<-c(5,10,20,40,80)
 reps<-10
 for(r in 1:reps){
   print(r)
@@ -220,19 +220,20 @@ for(r in 1:reps){
   }
 }
 
-results.df$autocorr_f<-as.factor(results.df$autocor)
+results.df$autocorr_f<-as.factor(results.df$autocorr)
 
 
-ggplot(results.df,aes(x=SR,y=Biomass,group=autocor,color=autocorr_f))+
+ggplot(results.df,aes(x=SR,y=Biomass,group=autocorr_f,color=autocorr_f))+
   geom_point()+
-  facet_grid(~scale)+
-  geom_smooth(method = 'lm',formula = y ~ poly(x,2))+
+  facet_wrap(~scale,scales="free")+
+  #geom_smooth(method = 'lm',formula = y ~ poly(x,3))+
   theme_bw()+
+  scale_color_brewer(palette = "YlGnBu",name="Env.\nautocorrelation")+
   removeGrid()+
   xlab("Species richness")
 ggsave(filename = "./figures/BEF curves - raw.pdf",width = 13,height = 4)
 
-ggplot(results.df,aes(x=SR,y=Biomass,group=autocorr,color=autocorr_f))+
+ggplot(filter(results.df,SR!=0),aes(x=SR,y=Biomass,group=autocorr_f,color=autocorr_f))+
   geom_point()+
   facet_grid(~scale)+
   geom_smooth(method = 'lm',formula = y ~ x)+
@@ -240,26 +241,39 @@ ggplot(results.df,aes(x=SR,y=Biomass,group=autocorr,color=autocorr_f))+
   scale_x_log10()+
   scale_y_log10()+
   removeGrid()+
+  scale_color_brewer(palette = "YlGnBu",name="Env.\nautocorrelation")+
   xlab("Species richness")
 ggsave(filename = "./figures/BEF curves.pdf",width = 13,height = 4)
 
+ggplot(filter(results.df,autocorr_f==0),aes(x=SR,y=Biomass,group=scale,color=scale))+
+         geom_smooth(method = 'lm',formula = y ~ x)+
+         theme_bw()+
+         scale_x_log10()+
+         scale_y_log10()+
+         removeGrid()+
+         xlab("Species richness")
+
 slopes.df<-results.df %>%
-  group_by(scale,autocorr_f) %>% # You can add here additional grouping variables if your real data set enables it
-  do(mod = lm(log(Biomass+1) ~ log(SR+1), data = .)) %>%
+  filter(SR!=0) %>% 
+  group_by(scale,autocorr_f,rep) %>% # You can add here additional grouping variables if your real data set enables it
+  do(mod = lm(log(Biomass) ~ log(SR), data = .)) %>%
   mutate(Slope = summary(mod)$coeff[2]) %>%
   select(-mod)
 
-ggplot(slopes.df,aes(x=scale,y=Slope,group=autocorr_f,color=autocorr_f))+
-  geom_point()+
+ggplot(slopes.df,aes(x=scale,y=Slope,group=autocorr_f,color=autocorr_f, fill=autocorr_f))+
+  #geom_point(pch=21,aes(fill=autocorr_f),color="black")+
   theme_bw()+
   scale_x_log10()+
   geom_smooth(method = 'lm',formula = y~poly(x,2))+
   removeGrid()+
+  scale_color_brewer(palette = "YlGnBu",name="Env.\nautocorrelation")+
+  scale_fill_brewer(palette = "YlGnBu",name="Env.\nautocorrelation")+
+  ylab("BEF slope")+
   xlab("Spatial scale")
-ggsave(filename = "./figures/BEF slope by scale - new method.pdf",width = 6,height = 4)
+ggsave(filename = "./figures/BEF slope by scale.pdf",width = 6,height = 4)
 
 #at just one level of gamma####
-ggplot(filter(results.df,Gamma==80),aes(x=SR,y=Biomass,group=autocorr_f,color=autocorr_f))+
+ggplot(filter(results.df,Gamma==40),aes(x=SR,y=Biomass,group=autocorr_f,color=autocorr_f))+
   geom_point()+
   facet_wrap(~scale,scales = "free")+
   geom_smooth(method = 'lm',formula = y ~ poly(x,2))+
@@ -267,9 +281,9 @@ ggplot(filter(results.df,Gamma==80),aes(x=SR,y=Biomass,group=autocorr_f,color=au
   removeGrid()+
   xlab("Species richness")
 
-ggplot(results.df,aes(x=SR,y=Biomass,group=autocorr_f,color=autocorr_f))+
+ggplot(filter(results.df,Gamma==80),aes(x=SR,y=Biomass,group=autocorr_f,color=autocorr_f))+
   geom_point()+
-  facet_wrap(~scale,scales = "free")+
+  facet_wrap(~scale,scales = "free_y")+
   geom_smooth(method = 'lm',formula = y ~ x)+
   theme_bw()+
   scale_x_log10()+
@@ -278,8 +292,9 @@ ggplot(results.df,aes(x=SR,y=Biomass,group=autocorr_f,color=autocorr_f))+
   xlab("Species richness")
 
 slopes.df<-results.df %>%
+  filter(Gamma==80,SR!=0) %>% 
   group_by(scale,autocorr_f) %>% # You can add here additional grouping variables if your real data set enables it
-  do(mod = lm(log(Biomass+1) ~ log(SR+1), data = .)) %>%
+  do(mod = lm(log(Biomass) ~ log(SR), data = .)) %>%
   mutate(Slope = summary(mod)$coeff[2]) %>%
   select(-mod)
 
