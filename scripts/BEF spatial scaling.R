@@ -12,6 +12,8 @@ library(tidyr)
 library(ggplot2)
 library(ggExtra)
 library(mvtnorm)
+library(ncf)
+library(viridis)
 
 #functions####
 matsplitter<-function(M, r1, c1) {
@@ -147,8 +149,10 @@ BEF_spat_scale<-function(disp=0,Int_type="Comp",nSpecies=40){
   #dispersal####
   disp_mat<-matrix(1/(nCom-1),nCom,nCom)
   diag(disp_mat)<-0
+
   
-  autocorrV<-c(1,0.95,0.9,0.5,0)
+  autocorrV<-c(1,0.95,0.9,0.75,0.6,0.5,0)
+  Morans<-data.frame(MoransI=NA,autocorr=rep(autocorrV,each=14),Distance=NA)
   for(ac in autocorrV){
     
     #environmental gradients
@@ -160,6 +164,23 @@ BEF_spat_scale<-function(disp=0,Int_type="Comp",nSpecies=40){
     re_random_patches<-sample(x = rand_env,size = rand_env,replace=F)
     
     Env[rand_patches,]<-Env[rand_patches,][re_random_patches,]
+    
+    x.coord <- rep(1:20, each=20)
+    y.coord <- rep(1:20, times=20)
+    xy <- data.frame(x.coord, y.coord)
+    
+    # all paiwise euclidean distances between the cells
+    xy.dist <- dist(xy)
+    
+    # PCNM axes of the dist. matrix (from 'vegan' package)
+    
+    # using 8th PCNM axis as my atificial z variable
+    z.value <- matrix(Env$Env1,20,20)
+    
+    ncf.cor <- correlog(x.coord, y.coord, c(z.value),increment = 2,resamp = 1)
+    Morans$MoransI[Morans$autocorr==ac]<-ncf.cor$correlation
+    Morans$Distance[Morans$autocorr==ac]<-ncf.cor$mean.of.class
+
     
     # if(lambda=="random"){
     #   Env <- data.frame(Env1=c(decostand(matrix(rnorm(nCom), nrow=nCom_rows, ncol=nCom_rows),method="range")),
@@ -222,6 +243,14 @@ for(r in 1:reps){
 
 results.df$autocorr_f<-as.factor(results.df$autocorr)
 
+ggplot(Morans,aes(x=Distance,y=MoransI,group=autocorr,color=factor(autocorr)))+
+  geom_point()+
+  geom_line()+
+  scale_color_brewer(palette = "YlGnBu",name="Env.\nautocorrelation")+
+  #theme_bw()+
+  removeGrid()
+ggsave("./figures/MoransI.pdf",width = 6,height = 4)
+
 
 ggplot(results.df,aes(x=SR,y=Biomass,group=autocorr_f,color=autocorr_f))+
   geom_point()+
@@ -262,7 +291,7 @@ slopes.df<-results.df %>%
 
 ggplot(slopes.df,aes(x=scale,y=Slope,group=autocorr_f,color=autocorr_f, fill=autocorr_f))+
   #geom_point(pch=21,aes(fill=autocorr_f),color="black")+
-  theme_bw()+
+  #theme_bw()+
   scale_x_log10()+
   geom_smooth(method = 'lm',formula = y~poly(x,2))+
   removeGrid()+
@@ -271,6 +300,26 @@ ggplot(slopes.df,aes(x=scale,y=Slope,group=autocorr_f,color=autocorr_f, fill=aut
   ylab("BEF slope")+
   xlab("Spatial scale")
 ggsave(filename = "./figures/BEF slope by scale.pdf",width = 6,height = 4)
+
+slopes.mean<-slopes.df %>% 
+  ungroup() %>% 
+  group_by(scale,autocorr_f) %>% 
+  summarise(slope=mean(Slope))
+
+ggplot(slopes.mean,aes(x=scale,y=autocorr_f,fill=slope))+
+  geom_tile()+
+  scale_x_log10()
+
+pdf("./figures/Slope 3D surface.pdf",width = 8,height = 8)
+wireframe(slope ~ log(scale)*autocorr_f, data = slopes.mean,
+          #xlab = "X Coordinate (feet)", ylab = "Y Coordinate (feet)",
+          #main = "Surface elevation data",
+          drape = TRUE,
+          colorkey = TRUE,
+          col.regions = viridis(n = 100),
+          screen = list(z = -20, x = -70, y = 5))
+dev.off()
+
 
 #at just one level of gamma####
 ggplot(filter(results.df,Gamma==40),aes(x=SR,y=Biomass,group=autocorr_f,color=autocorr_f))+
