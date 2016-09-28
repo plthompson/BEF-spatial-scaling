@@ -14,6 +14,7 @@ library(ggExtra)
 library(mvtnorm)
 library(ncf)
 library(viridis)
+library(betapart)
 
 #functions####
 matsplitter<-function(M, r1, c1) {
@@ -152,7 +153,7 @@ BEF_spat_scale<-function(disp=0,Int_type="Comp",nSpecies=40){
 
   
   autocorrV<-c(1,0.95,0.9,0.75,0.6,0.5,0)
-  Morans<-data.frame(MoransI=NA,autocorr=rep(autocorrV,each=14),Distance=NA)
+  #Morans<-data.frame(MoransI=NA,autocorr=rep(autocorrV,each=14),Distance=NA)
   for(ac in autocorrV){
     
     #environmental gradients
@@ -177,9 +178,9 @@ BEF_spat_scale<-function(disp=0,Int_type="Comp",nSpecies=40){
     # using 8th PCNM axis as my atificial z variable
     z.value <- matrix(Env$Env1,20,20)
     
-    ncf.cor <- correlog(x.coord, y.coord, c(z.value),increment = 2,resamp = 1)
-    Morans$MoransI[Morans$autocorr==ac]<-ncf.cor$correlation
-    Morans$Distance[Morans$autocorr==ac]<-ncf.cor$mean.of.class
+    #ncf.cor <- correlog(x.coord, y.coord, c(z.value),increment = 2,resamp = 1)
+    #Morans$MoransI[Morans$autocorr==ac]<-ncf.cor$correlation
+    #Morans$Distance[Morans$autocorr==ac]<-ncf.cor$mean.of.class
 
     
     # if(lambda=="random"){
@@ -212,9 +213,10 @@ BEF_spat_scale<-function(disp=0,Int_type="Comp",nSpecies=40){
       for(j in 1:dim(mats)[3]){
         X_sub<-X_final[c(mats[,,j]),]
         if(i==1){
-          data.sub<-data.frame(scale=sizes[i],SR=sum(X_sub>0),Biomass=sum(X_sub))
+          data.sub<-data.frame(scale=sizes[i],SR=sum(X_sub>0),Biomass=sum(X_sub),Beta=NA,Turnover=NA,Nestedness=NA)
         } else{
-          data.sub<-data.frame(scale=sizes[i],SR=sum(colSums(X_sub)>0),Biomass=sum(X_sub))
+          Beta<-beta.multi((X_sub>0)*1,index.family = "jaccard")
+          data.sub<-data.frame(scale=sizes[i],SR=sum(colSums(X_sub)>0),Biomass=sum(X_sub),Beta=Beta$beta.JAC,Turnover=Beta$beta.JTU,Nestedness=Beta$beta.JNE)
         }
         data.sub$autocorr<-ac
         if(i==1 & j==1 & ac == autocorrV[1]){
@@ -228,7 +230,7 @@ BEF_spat_scale<-function(disp=0,Int_type="Comp",nSpecies=40){
 
 #run model over range of gamma diversity####
 G_div<-c(5,10,20,40,80)
-reps<-10
+reps<-3
 for(r in 1:reps){
   print(r)
   for(g in G_div){
@@ -320,6 +322,19 @@ wireframe(slope ~ log(scale)*autocorr_f, data = slopes.mean,
           screen = list(z = -20, x = -70, y = 5))
 dev.off()
 
+tr<-results.df%>%
+  group_by(scale,autocorr_f)%>%
+  summarise(Lower=quantile(Turnover,probs = 0.25,na.rm=TRUE),Median=quantile(Turnover,probs = 0.5,na.rm=TRUE),Upper=quantile(Turnover,probs = 0.75,na.rm=TRUE))
+
+ggplot(results.df,aes(x=scale,y=Turnover,color=autocorr_f,fill=autocorr_f))+
+  scale_x_log10()+
+  geom_smooth(method = 'lm',formula = y ~ poly(x,3))+
+  scale_color_brewer(palette = "YlGnBu",name="Env.\nautocorrelation")+
+  scale_fill_brewer(palette = "YlGnBu",name="Env.\nautocorrelation")+
+  removeGrid()+
+  xlab("Scale")+
+  ylab("Beta diversity (turnover)")
+ggsave("./figures/Beta diversity by scale.pdf",width = 6,height = 4)
 
 #at just one level of gamma####
 ggplot(filter(results.df,Gamma==40),aes(x=SR,y=Biomass,group=autocorr_f,color=autocorr_f))+
