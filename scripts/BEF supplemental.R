@@ -45,7 +45,35 @@ plot_grid(S1a,S1b,ncol = 1)
 ggsave("./figures/Figure S1.pdf",width = 8,height=6)
 
 #Figure S2####
+Local_BEF_slope<-seq(-0.2,0.7,length=1000)
+function_5<-15^Local_BEF_slope
+function_4<-14^Local_BEF_slope
+function_change<-function_5-function_4
+inequality.df<-data.frame(BEF_slope=Local_BEF_slope,Function_change=function_change)
 
+Local_SR<-seq(1,40,length=1000)
+function_1<-Local_SR^0.26
+function_2<-(Local_SR+1)^0.26
+function_change<-function_2-function_1
+inequality.df2<-data.frame(Local_SR=Local_SR,Function_change=function_change)
+
+S2a<-ggplot(inequality.df,aes(x=BEF_slope,y=Function_change))+
+  geom_line()+
+  theme_bw()+
+  removeGrid()+
+  xlab("Local BEF slope")+
+  ylab("Change in function")
+  
+
+S2b<-ggplot(inequality.df2,aes(x=Local_SR,y=Function_change))+
+  geom_line()+
+  theme_bw()+
+  removeGrid()+
+  xlab("Initial local species richness")+
+  ylab("Change in function")
+
+plot_grid(S2a,S2b,ncol = 2,labels = c("a)","b)"))
+ggsave("./figures/Figure S2.pdf",width = 8,height=4)
 
 #Figure S3####
 #variation in slopes
