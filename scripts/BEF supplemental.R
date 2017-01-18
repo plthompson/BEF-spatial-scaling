@@ -61,7 +61,7 @@ function_2<-(Local_SR+1)^0.26 #calculate EF with one additional species
 function_change<-function_2-function_1 #calculate the difference
 inequality.df2<-data.frame(Local_SR=Local_SR,Function_change=function_change)
 
-S2a<-ggplot(inequality.df,aes(x=BEF_slope,y=Function_change))+
+S2b<-ggplot(inequality.df,aes(x=BEF_slope,y=Function_change))+
   geom_line()+
   theme_bw()+
   removeGrid()+
@@ -69,7 +69,7 @@ S2a<-ggplot(inequality.df,aes(x=BEF_slope,y=Function_change))+
   ylab("Change in function")
   
 
-S2b<-ggplot(inequality.df2,aes(x=Local_SR,y=Function_change))+
+S2a<-ggplot(inequality.df2,aes(x=Local_SR,y=Function_change))+
   geom_line()+
   theme_bw()+
   removeGrid()+
@@ -100,7 +100,7 @@ slopes.summary<-slopes.df %>%
   group_by(Scale) %>% 
   summarise(lower=quantile(Slopes,probs = 0.25),upper=quantile(Slopes,probs=0.75),Slopes=mean(Slopes))
 
-S3a<-ggplot(slopes.summary,aes(x=Scale,y=Slopes))+
+S3b<-ggplot(slopes.summary,aes(x=Scale,y=Slopes))+
   geom_ribbon(aes(ymin=lower,ymax=upper),alpha=0.3,color=NA)+
   geom_line()+
   theme_bw()+
@@ -127,7 +127,7 @@ slopes.summary2<-slopes2.df %>%
   group_by(Scale) %>% 
   summarise(lower=quantile(Slopes,probs = 0.25),upper=quantile(Slopes,probs=0.75),slope_mean=mean(Slopes))
 
-S3b<-ggplot(slopes.summary2,aes(x=Scale,y=slope_mean))+
+S3a<-ggplot(slopes.summary2,aes(x=Scale,y=slope_mean))+
   geom_ribbon(aes(ymin=lower,ymax=upper),alpha=0.3,color=NA)+
   geom_line()+
   theme_bw()+
