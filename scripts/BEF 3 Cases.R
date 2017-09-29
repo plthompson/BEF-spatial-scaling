@@ -2,6 +2,7 @@ library(tidyverse)
 library(broom)
 library(viridis)
 library(ggExtra)
+library(cowplot)
 
 #simulate BEF slope relationships####
 logit2prob <- function(logit){
@@ -13,7 +14,7 @@ logit2prob <- function(logit){
 
 Scale_fun<-function(r,scale = 5,bV = bV) {
   regional_rich.df<-do.call(rbind,lapply(1:3,function(case) {
-    logit_newV<-c(0,-0.01,-0.025,-0.05,-0.1,-0.25,-0.5,-0.75,-1)
+    logit_newV<-c(0,0.01,0.025,0.05,0.1,0.25,0.5,0.75,1)
     #simulate local richness
     repeat {
       local_richness<-rep(round(rnorm(n = 1,mean=10,sd=3)),scale)
@@ -49,10 +50,10 @@ Scale_fun<-function(r,scale = 5,bV = bV) {
       if(scale>1){
         for(j in 2:scale){
           if(local_richness[j]==1){
-            regional_richness_hold<-regional_richness+sapply(logit_newV,function(k){rbinom(n = local_richness[j],size = 1,prob = logit2prob(5+k*regional_richness))})
+            regional_richness_hold<-regional_richness+sapply(logit_newV,function(k){rbinom(n = local_richness[j],size = 1,prob = logit2prob(5-k*regional_richness))})
             regional_richness<-apply(rbind(regional_richness,regional_richness_hold),2, max)
           } else {
-            regional_richness_hold<-regional_richness+colSums(sapply(logit_newV,function(k){rbinom(n = local_richness[j],size = 1,prob = logit2prob(5+k*regional_richness))}))
+            regional_richness_hold<-regional_richness+colSums(sapply(logit_newV,function(k){rbinom(n = local_richness[j],size = 1,prob = logit2prob(5-k*regional_richness))}))
             regional_richness<-apply(rbind(regional_richness,regional_richness_hold),2, max)
           }
         }
@@ -181,7 +182,7 @@ ggplot(slopes.df,aes(x=Scale,y=r.squared,group=beta_dist,color=beta_dist))+
 ggsave("./figures/Simulated R2 by scale.pdf",width = 10,height = 6.5)
 
 
-logit_newV
+
 
 logits<-data.frame(sapply(logit_newV,function(k) logit2prob(5+k*1:200)))
 names(logits)<-logit_newV
@@ -197,7 +198,50 @@ ggplot(logits, aes(x=Richness,y=Probability, color=as.factor(as.numeric(Paramete
   scale_x_log10()
 ggsave("./figures/Richness accumulation prob.pdf",height = 3,width=5)
 
-save(slopes.df,file = "./data/Simulated scale BEF.RData")
+
+#Jensen's inequality case I and II####
+func_change<-data.frame(sapply(bV, FUN = function(x) { return((seq(2,41)^x)-(seq(1,40)^x))}))
+
+names(func_change)<-bV
+func_change$initial_S<-1:40
+
+fig2a<-func_change %>% 
+  gather(key = b, value = function_change,-initial_S) %>% 
+  ggplot(aes(x=initial_S,y=function_change,color=b))+
+  geom_line(size=1)+
+  theme_bw()+
+  removeGrid()+
+  scale_color_hue(guide=F)+
+  ylab("Change in functioning")+
+  xlab("Initial richness")+
+  ylim(-0.2,3.2)
+
+
+func_change<-data.frame(sapply(bV, FUN = function(x) { return((5^seq(from = x-0.1,x+0.1, length=40))
+                                                              -(4^seq(from = x-0.1,x+0.1, length=40)))}))
+b.df<-data.frame(sapply(bV, FUN = function(x) { return(seq(from = x-0.1,x+0.1, length=40))}))
+
+names(func_change)<-bV
+names(b.df)<-bV
+
+
+func_change<-func_change %>% 
+  gather(key = mean_b, value = function_change) 
+func_change$b<-unlist(c(b.df))
+
+fig2b<-ggplot(func_change,aes(x=b,y=function_change,color=mean_b))+
+  geom_line(size=1)+
+  theme_bw()+
+  removeGrid()+
+  ylab("Change in functioning")+
+  scale_color_hue(name="mean b")+
+  xlab("Local b")+
+  ylim(-0.2,3.2)+
+  theme(legend.justification=c(-0.1,1.05), legend.position=c(0,1))
+
+plot_grid(fig2a,fig2b,ncol = 2,labels = c("a)","b)"))
+ggsave("./figures/Figure 2.pdf",width = 8,height=4)
+
 
 #estimate probability of that new species is unique####
 reps<-99
