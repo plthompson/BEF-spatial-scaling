@@ -2,7 +2,6 @@ library(tidyverse)
 library(broom)
 library(viridis)
 library(ggExtra)
-library(cowplot)
 
 #simulate BEF slope relationships####
 logit2prob <- function(logit){
@@ -13,14 +12,14 @@ logit2prob <- function(logit){
 
 
 Scale_fun<-function(r,scale = 5,bV = bV) {
-  regional_rich.df<-do.call(rbind,lapply(1:3,function(case) {
-    logit_newV<-c(0,0.01,0.025,0.05,0.1,0.25,0.5,0.75,1)
+  regional_rich.df<-do.call(rbind,lapply(1:4,function(case) {
+    logit_newV<-c(0,0.01,0.025,0.05,0.1,0.25,0.5,0.75)
     #simulate local richness
     repeat {
       local_richness<-rep(round(rnorm(n = 1,mean=10,sd=3)),scale)
       if(mean(local_richness>0)==1) break
     }
-    if(case==1){
+    if(case == 2){
       repeat {
         local_richness<-round(rnorm(n = scale,mean=10,sd=3))
         if(mean(local_richness>0)==1) break
@@ -29,7 +28,7 @@ Scale_fun<-function(r,scale = 5,bV = bV) {
     
     #estimate local biomass
     biomass<-sapply(X = bV, FUN = function(b){
-      if(case == 2){
+      if(case == 3){
         if(scale==1){
           biomass<-local_richness^rnorm(scale,mean = b,sd = 0.11)
         } else{
@@ -45,7 +44,7 @@ Scale_fun<-function(r,scale = 5,bV = bV) {
     })
     
     #estimate regional richness
-    if(case==3){
+    if(case == 4){
       regional_richness<-rep(local_richness[1],length(logit_newV))
       if(scale>1){
         for(j in 2:scale){
@@ -71,8 +70,8 @@ Scale_fun<-function(r,scale = 5,bV = bV) {
   return(regional_rich.df)
 }
 
-repsV<-100
-reps1<-1:100
+repsV<-50
+reps1<-1:500
 scales<-1:50
 bV<-seq(-0.25,1.25, by = 0.25)
 pb <- txtProgressBar(min = 0, max = max(scales), style = 3)
@@ -107,14 +106,16 @@ for(r in 1:repsV){
   }
 }
 
-save(slopes.df,file = "./data/Simulated scale BEF.RData")
+save(slopes.df,bV,file = "./data/Simulated scale BEF.RData")
+
 
 slopes_mean<-slopes.df %>% 
   group_by(scale,logit_new,local_b,case) %>% 
-  summarise(lower = quantile(b,probs = 0.25), upper = quantile(b,probs = 0.75),b = mean(b))
+  summarise(lower = quantile(b,probs = 0.25), upper = quantile(b,probs = 0.75),b = median(b),
+            lower.r2 = quantile(r.squared,probs = 0.25,na.rm=TRUE), upper.r2 = quantile(r.squared,probs = 0.75,na.rm=TRUE),r2 = median(r.squared,na.rm=TRUE))
 
-ggplot(filter(slopes_mean, case!=3),aes(x=scale,y=b, group = local_b, fill=as.character(local_b)))+
-  geom_hline(yintercept = bV, linetype=2)+
+ggplot(filter(slopes_mean, case!=4, local_b == 0.25),aes(x=scale,y=b, group = local_b))+
+  geom_hline(yintercept = 0.25, linetype=3)+
   geom_ribbon(aes(ymin = lower,ymax = upper), alpha = 0.5)+
   facet_wrap(~case)+
   #geom_hline(yintercept = 0, linetype=1,size=0.2)+
@@ -125,66 +126,83 @@ ggplot(filter(slopes_mean, case!=3),aes(x=scale,y=b, group = local_b, fill=as.ch
   #geom_smooth(method="lm", formula = y~poly(x,3),se=F)+
   scale_fill_brewer(palette = "Set1",name="local b")+
   theme_bw()+
-  removeGrid()
-ggsave("./figures/Case I & II.pdf",width = 8,height = 6)
+  removeGrid()+
+  xlab("Scale")+
+  ylab(expression(italic(b) [A]))
+ggsave("./figures/Case I, II, & III, b = 0.25.pdf",width = 9,height = 4)
+
+ggplot(filter(slopes_mean, case!=4),aes(x=scale,y=b, group = local_b, fill=as.character(local_b)))+
+  geom_hline(yintercept = bV, linetype=3)+
+  geom_ribbon(aes(ymin = lower,ymax = upper), alpha = 0.5)+
+  facet_wrap(~case)+
+  #geom_hline(yintercept = 0, linetype=1,size=0.2)+
+  geom_line()+
+  #geom_smooth(method = "gam",formula = y ~ s(x,k=4),se=F)+
+  #geom_point()+
+  #stat_smooth(method = "gam", formula = y ~ s(x, k = 3), size = 1)+
+  #geom_smooth(method="lm", formula = y~poly(x,3),se=F)+
+  scale_fill_brewer(palette = "Set1",name= expression(paste("mean ", italic(b) [i]), sep=""))+
+  theme_bw()+
+  removeGrid()+
+  xlab("Scale")+
+  ylab(expression(italic(b) [A]))
+ggsave("./figures/Case I, II, & III.pdf",width = 9,height = 5)
 
 
-ggplot(filter(slopes_mean,local_b==0.25, case==3),aes(x=scale,y=b,group=as.factor(logit_new),fill=as.factor(logit_new),color=as.factor(logit_new)))+
+Fig3.a<-ggplot(filter(slopes_mean,local_b==0.25, case == 4,logit_new<1),aes(x=scale,y=b,group=as.factor(logit_new),fill=as.factor(logit_new),color=as.factor(logit_new)))+
   geom_hline(yintercept = 0.25, linetype=2)+
-  geom_hline(yintercept = 0, linetype=1,size=0.2)+
   geom_ribbon(aes(ymin = lower,ymax = upper), alpha = 0.5,color=NA)+
   geom_line(size=1)+
-  #geom_smooth(method = "gam",formula = y ~ s(x,k=4),se=F)+
-  #geom_point()+
-  #stat_smooth(method = "gam", formula = y ~ s(x, k = 3), size = 1)+
-  #geom_smooth(method="lm", formula = y~poly(x,3),se=F)+
-  scale_color_hue(name=expression(italic(p)),c = 100,l = 60)+
+  #scale_color_hue(name=expression(italic(p)),c = 100,l = 60,h.start = 50)+
+  #scale_fill_hue(name=expression(italic(p)),c = 100,l = 60,guide = FALSE,h.start = 50,)+
+  scale_color_viridis(discrete = TRUE, option = "A", name=expression(italic(p)), guide=F, end = 0.95)+
+  scale_fill_viridis(discrete = TRUE, option = "A", name=expression(italic(p)), guide = F,end = 0.95)+
   theme_bw()+
-  removeGrid()
-ggsave("./figures/Case III.pdf",width = 6,height = 4)
+  removeGrid()+
+  xlab("Scale")+
+  ylab(expression(italic(b) [A]))
 
-ggplot(filter(slopes_mean, case==3),aes(x=scale,y=b,group=as.factor(logit_new),fill=as.factor(logit_new),color=as.factor(logit_new)))+
-  geom_hline(aes(yintercept = local_b), linetype=2)+
-  geom_hline(yintercept = 0, linetype=1,size=0.2)+
+
+Fig3.b<-ggplot(filter(slopes_mean,local_b==0.25, case == 4, logit_new<1),aes(x=scale,y=r2,group=as.factor(logit_new),fill=as.factor(logit_new),color=as.factor(logit_new)))+
+  geom_ribbon(aes(ymin = lower.r2,ymax = upper.r2), alpha = 0.5,color=NA)+
+  geom_line(size=1)+
+  #scale_color_hue(name=expression(italic(p)),c = 100,l = 60,h.start = 50)+
+  #scale_fill_hue(name=expression(italic(p)),c = 100,l = 60,guide = FALSE,h.start = 50,)+
+  scale_color_viridis(discrete = TRUE, option = "A", name=expression(italic(p)), end = 0.95)+
+  scale_fill_viridis(discrete = TRUE, option = "A", name=expression(italic(p)), end = 0.95)+
+  theme_bw()+
+  removeGrid()+
+  scale_y_continuous(limits = c(0,1))+
+  xlab("Scale")+
+  ylab(expression(paste("R"^"2")))+ 
+  theme(legend.justification=c(0,0), legend.position=c(0,0),legend.background = element_rect(fill="NA", size=0.5, linetype="solid"),
+        legend.key.size =  unit(0.15, "in"))
+  
+plot_grid(Fig3.a,Fig3.b,labels = c("a)","b)"))
+ggsave("./figures/Case IV.pdf",width = 8,height = 3.5)
+
+
+ggplot(filter(slopes_mean, case == 4),aes(x=scale,y=b,group=as.factor(logit_new),fill=as.factor(logit_new),color=as.factor(logit_new)))+
+  geom_hline(yintercept = 0,size=0.5)+
   geom_ribbon(aes(ymin = lower,ymax = upper), alpha = 0.5,color=NA)+
-  geom_line()+
+  geom_line(size=1)+
   facet_wrap(~local_b)+
-  scale_color_hue(name=expression(italic(p)),c = 100,l = 60)+
-  scale_fill_hue(guide=F)+
+  #scale_color_hue(name=expression(italic(p)),c = 100,l = 60,h.start = 50)+
+  #scale_fill_hue(name=expression(italic(p)),c = 100,l = 60,guide = FALSE,h.start = 50,)+
+  scale_color_viridis(discrete = TRUE, option = "A", name=expression(italic(p)))+
+  scale_fill_viridis(discrete = TRUE, option = "A", name=expression(italic(p)))+
   theme_bw()+
-  removeGrid()
-ggsave("./figures/Case III - all.pdf",width = 8,height = 6)
-
-
-ggplot(filter(slopes.df,local_b==0.5),aes(x=Scale,y=b,group=beta_dist,color=beta_dist))+
-  geom_hline(yintercept = 0.5, linetype=2)+
-  geom_hline(yintercept = 0, linetype=1)+
-  geom_line()+
-  #geom_smooth(method = "gam",formula = y ~ s(x,k=4),se=F)+
-  #geom_point()+
-  #stat_smooth(method = "gam", formula = y ~ s(x, k = 3), size = 1)+
-  #geom_smooth(method="lm", formula = y~poly(x,3),se=F)+
-  scale_color_hue(name="Beta distribution")+
-  facet_wrap(~logit_new)+
-  theme_bw()+
-  removeGrid()
-ggsave("./figures/Simulated slope by scale.pdf",width = 10,height = 6.5)
-
-ggplot(slopes.df,aes(x=Scale,y=r.squared,group=beta_dist,color=beta_dist))+
-  geom_line()+
-  #geom_point()+
-  #stat_smooth(method = "gam", formula = y ~ s(x, k = 3), size = 1)+
-  #geom_smooth(method="lm", formula = y~poly(x,3),se=F)+
-  scale_color_hue(name="Beta distribution")+
-  facet_wrap(~logit_new)+
-  theme_bw()+
-  removeGrid()
-ggsave("./figures/Simulated R2 by scale.pdf",width = 10,height = 6.5)
+  removeGrid()+
+  xlab("Scale")+
+  ylab(expression(italic(b)[A]))
+ggsave("./figures/Case IV - all.pdf",width = 8,height = 6)
 
 
 
 
-logits<-data.frame(sapply(logit_newV,function(k) logit2prob(5+k*1:200)))
+
+
+logits<-data.frame(sapply(logit_newV,function(k) logit2prob(5-k*1:200)))
 names(logits)<-logit_newV
 logits$Richness<-1:200
 
@@ -192,14 +210,14 @@ logits<-logits %>%
   gather(key = Parameter,value = Probability,-Richness)
 
 ggplot(logits, aes(x=Richness,y=Probability, color=as.factor(as.numeric(Parameter))))+
-  geom_line()+
+  geom_line(size=1)+
   theme_bw()+
-  removeGrid()+
-  scale_x_log10()
+  scale_color_viridis(name=expression(italic(p)), discrete = TRUE)+
+  removeGrid()
 ggsave("./figures/Richness accumulation prob.pdf",height = 3,width=5)
 
 
-#Jensen's inequality case I and II####
+#Jensen's inequality case II and III####
 func_change<-data.frame(sapply(bV, FUN = function(x) { return((seq(2,41)^x)-(seq(1,40)^x))}))
 
 names(func_change)<-bV
@@ -211,10 +229,22 @@ fig2a<-func_change %>%
   geom_line(size=1)+
   theme_bw()+
   removeGrid()+
-  scale_color_hue(guide=F)+
+  scale_color_brewer(palette = "Set1",guide = FALSE)+
   ylab("Change in functioning")+
   xlab("Initial richness")+
   ylim(-0.2,3.2)
+
+func_change %>%
+  gather(key = b, value = function_change,-initial_S) %>% 
+  filter(b==0.25) %>% 
+  ggplot(aes(x=initial_S,y=function_change))+
+  geom_line(size=1)+
+  theme_bw()+
+  removeGrid()+
+  scale_color_hue(guide=F)+
+  ylab("Change in functioning")+
+  xlab("Initial richness")
+ggsave("./figures/Jensen's II.pdf",width = 5,height = 4)
 
 
 func_change<-data.frame(sapply(bV, FUN = function(x) { return((5^seq(from = x-0.1,x+0.1, length=40))
@@ -233,43 +263,54 @@ fig2b<-ggplot(func_change,aes(x=b,y=function_change,color=mean_b))+
   geom_line(size=1)+
   theme_bw()+
   removeGrid()+
+  scale_color_brewer(palette = "Set1",name=expression(paste("mean ",italic(b) [i])))+
   ylab("Change in functioning")+
-  scale_color_hue(name="mean b")+
-  xlab("Local b")+
+  xlab(expression(italic(b) [i]))+
   ylim(-0.2,3.2)+
   theme(legend.justification=c(-0.1,1.05), legend.position=c(0,1))
 
+library(cowplot)
 plot_grid(fig2a,fig2b,ncol = 2,labels = c("a)","b)"))
 ggsave("./figures/Figure 2.pdf",width = 8,height=4)
 
+func_change %>% 
+  filter(mean_b==0.25) %>% 
+  ggplot(aes(x=b,y=function_change))+
+  geom_line(size=1)+
+  theme_bw()+
+  removeGrid()+
+  scale_color_hue(guide=F)+
+  ylab("Change in functioning")+
+  xlab("Local b")
+ggsave("./figures/Jensen's II.pdf",width = 5,height = 4)
 
-#estimate probability of that new species is unique####
-reps<-99
-pb <- txtProgressBar(min = 0, max = reps, style = 3)
-NewSp.df<-data.frame()
-for(r in 1:reps){
-  setTxtProgressBar(pb, r)
-  sampled_plots<-sample(unique(filter(Bmass,NumSp<16)$Plot),size = 20,replace=F)
-  
-  sampled_region<-Bmass %>%
-    filter(NumSp!=16) %>%
-    filter(Year==2014) %>% 
-    filter(Plot %in% sampled_plots) %>%
-    mutate(Sim_biomass = exp(5.5)*NumSp^b) %>% 
-    left_join(Com_mat,by = "Plot") %>% 
-    ungroup() %>% 
-    select(Achmi:Sornu)
-  
-  
-  for(j in 2:20){
-    sampled_region_sub<-sampled_region %>% 
-      select(which(sampled_region[j,]==1))
-    New<-c(sampled_region_sub[j,]>0 & colSums(sampled_region_sub[1:(j-1),])==0)
-    NewSp.df<-rbind(NewSp.df,data.frame(New=New,Richness=sum(colSums(sampled_region[1:(j-1),])>0),Scale=j,rep=r))
-  }
+
+#Illustrate scaling in CASE IV####
+scale_BEF_all<-data.frame()
+for(i in c(1,5,10,15,20,30,40,50)){
+scale_BEF<-do.call(rbind, lapply(1:100, FUN = Scale_fun,scale=i,bV=bV))
+scale_BEF<-scale_BEF %>% 
+  filter(local_b==0.25,case==4,logit_new==0.25)
+
+scale_BEF_all<-rbind(scale_BEF_all,scale_BEF)
 }
 
-model<-glm(New~Richness,family = binomial(link = "logit"),data=NewSp.df)
-summary(model)
+slopes.df.temp<-scale_BEF_all %>%
+  filter(Div_g>0) %>% 
+  group_by(scale, logit_new,case,local_b) %>% 
+  do(lm.scale=lm(log(biomass)~log(Div_g),data=.)) %>%
+  tidy(lm.scale) %>% 
+  select(term,estimate,scale, logit_new,local_b,case) %>% 
+  spread(key = term,value = estimate)
 
+ggplot(scale_BEF_all,aes(x=Div_g/scale,y=biomass,color=scale,group=scale))+
+  geom_point()+
+  geom_smooth(method="lm")+
+  scale_y_log10()+
+  scale_x_log10()+
+  theme_bw()+
+  removeGrid()+
+  xlab("Gamma diversity/scale")+
+  ylab("Ecosystem function")
+ggsave("./figures/CASE IV scaling.pdf",height = 4, width =6)
 
