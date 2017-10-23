@@ -148,6 +148,21 @@ ggplot(filter(slopes_mean, case!=4),aes(x=scale,y=b, group = local_b, fill=as.ch
   ylab(expression(italic(b) [A]))
 ggsave("./figures/Case I, II, & III.pdf",width = 9,height = 5)
 
+ggplot(filter(slopes_mean, case!=4),aes(x=scale,y=r2, group = as.character(local_b), fill=as.character(local_b)))+
+  geom_ribbon(aes(ymin = lower.r2,ymax = upper.r2), alpha = 0.5)+
+  facet_wrap(~case)+
+  #geom_hline(yintercept = 0, linetype=1,size=0.2)+
+  geom_line()+
+  #geom_smooth(method = "gam",formula = y ~ s(x,k=4),se=F)+
+  #geom_point()+
+  #stat_smooth(method = "gam", formula = y ~ s(x, k = 3), size = 1)+
+  #geom_smooth(method="lm", formula = y~poly(x,3),se=F)+
+  scale_fill_brewer(palette = "Set1",name= expression(paste("mean ", italic(b) [i]), sep=""))+
+  theme_bw()+
+  removeGrid()+
+  xlab("Scale")+
+  ylab(expression(italic(b) [A]))
+
 
 Fig3.a<-ggplot(filter(slopes_mean,local_b==0.25, case == 4,logit_new<1),aes(x=scale,y=b,group=as.factor(logit_new),fill=as.factor(logit_new),color=as.factor(logit_new)))+
   geom_hline(yintercept = 0.25, linetype=2)+
