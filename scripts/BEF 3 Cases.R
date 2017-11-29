@@ -12,7 +12,7 @@ logit2prob <- function(logit){
 
 
 Scale_fun<-function(r,scale = 5,bV = bV) {
-  regional_rich.df<-do.call(rbind,lapply(1:4,function(case) {
+  regional_rich.df<-do.call(rbind,lapply(1:5,function(case) {
     logit_newV<-c(0,0.01,0.025,0.05,0.1,0.25,0.5,0.75)
     #simulate local richness
     repeat {
@@ -34,14 +34,27 @@ Scale_fun<-function(r,scale = 5,bV = bV) {
         } else{
           biomass<-sum(local_richness^rnorm(scale,mean = b,sd = 0.11))
         }
-      } else {
-        if(scale==1){
-          biomass<-local_richness^b
-        } else{
-          biomass<-sum(local_richness^b)
+      } else{
+        if(case ==5){
+          repeat {
+          a<-rnorm(n = scale,mean = 5, sd = 2)
+          if (sum(a>0) ==scale) break
+          }
+          if(scale==1){
+            biomass<-a+local_richness^b
+          } else{
+            biomass<-sum(a+local_richness^b)
+          }
+        } else {
+          if(scale==1){
+            biomass<-local_richness^b
+          } else{
+            biomass<-sum(local_richness^b)
+          }
         }
       }
-    })
+    }
+    )
     
     #estimate regional richness
     if(case == 4){
@@ -70,7 +83,7 @@ Scale_fun<-function(r,scale = 5,bV = bV) {
   return(regional_rich.df)
 }
 
-repsV<-50
+repsV<-10#50
 reps1<-1:500
 scales<-1:50
 bV<-seq(-0.25,1.25, by = 0.25)
@@ -108,7 +121,6 @@ for(r in 1:repsV){
 
 save(slopes.df,bV,file = "./data/Simulated scale BEF.RData")
 
-
 slopes_mean<-slopes.df %>% 
   group_by(scale,logit_new,local_b,case) %>% 
   summarise(lower = quantile(b,probs = 0.25), upper = quantile(b,probs = 0.75),b = median(b),
@@ -131,22 +143,24 @@ ggplot(filter(slopes_mean, case!=4, local_b == 0.25),aes(x=scale,y=b, group = lo
   ylab(expression(italic(b) [A]))
 ggsave("./figures/Case I, II, & III, b = 0.25.pdf",width = 9,height = 4)
 
-ggplot(filter(slopes_mean, case!=4),aes(x=scale,y=b, group = local_b, fill=as.character(local_b)))+
-  geom_hline(yintercept = bV, linetype=3)+
+
+ggplot(filter(slopes_mean, case!=4),aes(x=scale,y=b, group = local_b))+
+  #geom_hline(yintercept = bV, linetype=3)+
   geom_ribbon(aes(ymin = lower,ymax = upper), alpha = 0.5)+
-  facet_wrap(~case)+
+  facet_grid(local_b~case, scales = "free")+
   #geom_hline(yintercept = 0, linetype=1,size=0.2)+
   geom_line()+
   #geom_smooth(method = "gam",formula = y ~ s(x,k=4),se=F)+
   #geom_point()+
   #stat_smooth(method = "gam", formula = y ~ s(x, k = 3), size = 1)+
   #geom_smooth(method="lm", formula = y~poly(x,3),se=F)+
-  scale_fill_brewer(palette = "Set1",name= expression(paste("mean ", italic(b) [i]), sep=""))+
+  #scale_fill_brewer(palette = "Set1",name= expression(paste("mean ", italic(b) [i]), sep=""))+
   theme_bw()+
   removeGrid()+
   xlab("Scale")+
+  scale_y_continuous(breaks = seq(-0.5,1.5,by=0.05))+
   ylab(expression(italic(b) [A]))
-ggsave("./figures/Case I, II, & III.pdf",width = 9,height = 5)
+ggsave("./figures/Case I, II, & III.pdf",width = 7,height = 5)
 
 ggplot(filter(slopes_mean, case!=4),aes(x=scale,y=r2, group = as.character(local_b), fill=as.character(local_b)))+
   geom_ribbon(aes(ymin = lower.r2,ymax = upper.r2), alpha = 0.5)+
@@ -192,7 +206,7 @@ Fig3.b<-ggplot(filter(slopes_mean,local_b==0.25, case == 4, logit_new<1),aes(x=s
   ylab(expression(paste("R"^"2")))+ 
   theme(legend.justification=c(0,0), legend.position=c(0,0),legend.background = element_rect(fill="NA", size=0.5, linetype="solid"),
         legend.key.size =  unit(0.15, "in"))
-  
+
 plot_grid(Fig3.a,Fig3.b,labels = c("a)","b)"))
 ggsave("./figures/Case IV.pdf",width = 8,height = 3.5)
 
@@ -303,11 +317,11 @@ ggsave("./figures/Jensen's II.pdf",width = 5,height = 4)
 #Illustrate scaling in CASE IV####
 scale_BEF_all<-data.frame()
 for(i in c(1,5,10,15,20,30,40,50)){
-scale_BEF<-do.call(rbind, lapply(1:100, FUN = Scale_fun,scale=i,bV=bV))
-scale_BEF<-scale_BEF %>% 
-  filter(local_b==0.25,case==4,logit_new==0.25)
-
-scale_BEF_all<-rbind(scale_BEF_all,scale_BEF)
+  scale_BEF<-do.call(rbind, lapply(1:100, FUN = Scale_fun,scale=i,bV=bV))
+  scale_BEF<-scale_BEF %>% 
+    filter(local_b==0.25,case==4,logit_new==0.25)
+  
+  scale_BEF_all<-rbind(scale_BEF_all,scale_BEF)
 }
 
 slopes.df.temp<-scale_BEF_all %>%
