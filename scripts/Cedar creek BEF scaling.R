@@ -1,9 +1,14 @@
+# code to reproduce the Figure 4 in Thompson et al. - The strength of the biodiversity-ecosystem function relationship depends on spatial scale
+# all code written by Patrick Thompson
+
+#packages
 library(tidyverse)
 library(broom)
 library(viridis)
 library(ggExtra)
 library(cowplot)
 
+#data is available from https://www.cedarcreek.umn.edu/research/data
 CCe120<-read.csv(file = "./data/e120_Plant aboveground biomass data.csv",skip = 80,header=T)
 head(CCe120)
 CCe120_spec_list<-read.csv(file = "./data/e120_specieslist.csv",row.names = NULL)
@@ -19,7 +24,7 @@ Bmass<-CCe120 %>%
   summarise(Biomass=sum(Biomass..g.m2.,na.rm=TRUE)) %>% 
   ungroup() %>% 
   group_by(Year,Plot,NumSp) %>% 
-  summarise(Biomass=mean(Biomass)) #should I be taking the average biomass across all samples in a year?
+  summarise(Biomass=mean(Biomass))
 
 Bmass<-Bmass %>% 
   group_by(Plot) %>%
@@ -64,7 +69,7 @@ ggplot(Bmass,aes(x=NumSp,y=Biomass)) +
   #scale_y_log10()+
   theme_bw()+
   removeGrid()
-ggsave("./figures/Cedar creek local data.pdf", width=20,height=4)
+#ggsave("./figures/Cedar creek local data.pdf", width=20,height=4)
 
 ggplot(Bmass,aes(x=NumSp,y=Biomass,color=as.character(Year),group=Year)) +
   #facet_wrap(~Year)+
@@ -193,6 +198,7 @@ Fig4.a<-results.df %>%
   removeGrid()+
   geom_ribbon(aes(ymin=lower,ymax=upper),alpha=0.5,color=NA)+
   xlab(expression(paste("Scale m"^"2")))+
+  ylab(expression(italic(b) [A]))+
   theme(legend.justification=c(0,0.9), legend.position=c(0.05,0.95))
 
 Fig4.b<-results.df %>%
@@ -211,388 +217,4 @@ Fig4.b<-results.df %>%
   ylab(expression(paste("R"^"2")))
 
 plot_grid(Fig4.a,Fig4.b,labels = c("a)","b)"))
-ggsave("./figures/Cedar creek - BEF_scale.pdf", height=3.5,width = 8)
-
-
-ggplot(filter(Regional_div,Year==2014),aes(x=Div_g, y=Biomass/scale))+
-  geom_point()+
-  facet_wrap(~scale)+
-  geom_smooth(method = 'lm')+
-  scale_y_log10()+
-  scale_x_log10()+
-  theme_bw()+
-  xlab("Species richness")
-ggsave("./figures/BEF scale CC - 2014.pdf", width = 10,height = 8)
-
-
-slopes<-Regional_div %>% 
-  group_by(scale,Year) %>% 
-  do(BEF_slope = lm(log(Biomass) ~ log(Div_g), data = .)) %>% 
-  tidy(BEF_slope) %>% 
-  filter(term=="log(Div_g)")
-
-ggplot(slopes,aes(x=scale,y = estimate, color=as.character(Year), group=Year))+
-  geom_point()+
-  #geom_line()+
-  geom_smooth(method = 'lm', formula = y~poly(x,3), se = F)+
-  scale_color_discrete(name="Year")+
-  theme_bw()+
-  #scale_y_continuous(breaks = seq(0,1.5,by=0.25),minor_breaks = seq(0.25,1.25,by=0.25))+
-  ylab("b")+
-  xlab("Scale m^2")+
-  removeGrid()
-ggsave("./figures/Cedar creek - BEF_scale.pdf", height=6,width = 8)
-
-#plot beta diversity by space relationship
-Beta_mean<-Regional_div %>% 
-  filter(Year==2005) %>%
-  group_by(scale) %>% 
-  summarise(mean_beta = mean(Div_b))
-
-
-ggplot(filter(Regional_div, Year==2005),aes(x=scale,y = Div_b))+
-  geom_point()+
-  geom_line(data=Beta_mean,aes(x=scale,y=mean_beta))+
-  #geom_line()+
-  #geom_smooth(method = 'lm', se = F)+
-  theme_bw()+
-  xlim(0,1700)+
-  ylab("beta diversity")+
-  xlab("Scale m^2")+
-  removeGrid()
-
-
-Regional_div %>% 
-  group_by(scale,Year) %>% 
-  summarise(Biomass=max(Biomass)/min(Biomass), Richness=max(Div_g)/min(Div_g)) %>% 
-  gather(key = Type,value = Ratio,Biomass:Richness) %>% 
-  ggplot(aes(x=scale,y=Ratio,color=Type))+
-  geom_point()+
-  facet_wrap(~Year)+
-  scale_y_log10()+
-  theme_bw()+
-  removeGrid()+
-  ylab("max/min")
-ggsave("./figures/Ratios.pdf",width = 8,height=6)
-
-Regional_div %>% 
-  filter(scale==81*20) %>%
-  ggplot(aes(x=Div_g,y=Biomass))+
-  geom_point()+
-  facet_grid(~Year)+
-  stat_smooth(method="lm")
-
-Regional_div %>% 
-  filter(scale==81) %>%
-  ggplot(aes(x=Div_g,y=Biomass))+
-  geom_point()+
-  facet_wrap(~Year)+
-  stat_smooth(method="lm")+
-  scale_x_log10(breaks=c(1,2,4,8))+
-  scale_y_log10()+
-  xlab("Species richness")+
-  theme_bw()+
-  removeGrid()
-ggsave("./figures/Local BEF.pdf",width = 8,height=8)
-
-BEF_scale_effect<-slopes %>% 
-  group_by(Year) %>% 
-  do(scale_slope=lm(estimate~scale,data=.)) %>% 
-  tidy(scale_slope) %>% 
-  filter(term=="scale") %>% 
-  select(Year,estimate) 
-
-names(BEF_scale_effect)<-c("Year","Scale_slope")
-
-ggplot(BEF_scale_effect,aes(x=Year,y=estimate))+
-  geom_point()+
-  theme_bw()
-
-local.ab<-Bmass %>% 
-  group_by(Year) %>% 
-  do(year.lm=lm(log(Biomass)~log(NumSp),data=.)) %>% 
-  tidy(year.lm) %>% 
-  select(Year,term,estimate) %>% 
-  spread(key = term,value = estimate)
-names(local.ab)<-c("Year","a","b")
-
-local.ab %>% 
-  gather(key = parameter,value=value,a:b) %>% 
-  ggplot(aes(x=Year,y=value))+
-  geom_point()+
-  facet_wrap(~parameter, scale="free")+
-  theme_bw()+
-  removeGrid()
-ggsave("./figures/Local_ab.pdf", width = 7,height = 4)
-
-
-left_join(BEF_scale_effect,local.ab) %>% 
-  ggplot(aes(x=b,y=Scale_slope))+
-  geom_point()
-
-
-
-#test with no fixed species pool####
-plot_id<-unique(filter(Bmass,NumSp<16)$Plot)
-reps<-999
-scales<-c(1,2,4,6,8,10,12,14,16,18,20)
-Regional_div_infSp<-data.frame()
-pb <- txtProgressBar(min = 0, max = reps, style = 3)
-for(i in scales){
-  print(paste("Scale = ", i, sep=""))
-  for(r in 1:reps){
-    sampled_plots<-sample(plot_id,size = i,replace=F)
-    
-    sampled_region<-Bmass %>%
-      filter(NumSp!=16) %>%
-      group_by(Year) %>% 
-      filter(Plot %in% sampled_plots) %>% 
-      summarise(Biomass=sum(Biomass),NumSp=sum(NumSp))
-    
-    sampled_region$scale <- i*9^2
-    sampled_region$rep <- r
-    Regional_div_infSp<-rbind(Regional_div_infSp,sampled_region)
-    setTxtProgressBar(pb, r)
-  }
-  close(pb)
-}
-
-ggplot(filter(Regional_div_infSp,Year==2014),aes(x=NumSp, y=Biomass))+
-  geom_point()+
-  facet_wrap(~scale)+
-  geom_smooth(method = 'lm')+
-  scale_y_log10()+
-  scale_x_log10()+
-  theme_bw()+
-  xlab("Species richness")
-ggsave("./figures/BEF scale CC - InfSp - 2014.pdf", width = 10,height = 8)
-
-slopes_infSp<-Regional_div_infSp %>% 
-  group_by(scale,Year) %>% 
-  do(BEF_slope = lm(log(Biomass) ~ log(NumSp), data = .)) %>% 
-  tidy(BEF_slope) %>% 
-  filter(term=="log(NumSp)")
-
-ggplot(slopes_infSp,aes(x=scale,y = estimate, color=as.character(Year), group=Year))+
-  geom_point()+
-  #geom_line()+
-  geom_smooth(method = 'lm', formula = y~poly(x,1), se = F)+
-  scale_color_discrete(name="Year")+
-  theme_bw()+
-  xlim(0,1700)+
-  scale_y_continuous(breaks = seq(0,1.5,by=0.5),minor_breaks = seq(0.25,1.25,by=0.25))+
-  ylab("b")+
-  xlab("Scale m^2")+
-  removeGrid()
-
-
-#test with fixed ab####
-local.ab<-Bmass %>% 
-  group_by(Year) %>% 
-  do(year.lm=lm(log(Biomass)~log(NumSp),data=.)) %>% 
-  tidy(year.lm) %>% 
-  select(Year,term,estimate) %>% 
-  spread(key = term,value = estimate)
-
-names(local.ab)<-c("Year","a","b")
-
-reps<-500
-scales<-c(1,seq(5,50,by=5))
-Regional_div.fixed.ab<-data.frame()
-pb <- txtProgressBar(min = 0, max = reps, style = 3)
-for(i in scales){
-  print(paste("Scale = ", i, sep=""))
-  for(r in 1:reps){
-    sampled_plots<-sample(plot_id,size = i,replace=TRUE)
-    
-    sampled_region<-Bmass %>% 
-      filter(Plot %in% sampled_plots) %>% 
-      left_join(local.ab,by="Year") %>%
-      group_by(Year) %>% 
-      mutate(Biomass_est=exp(a)*NumSp^b) %>% 
-      left_join(Com_mat,by = "Plot") %>%
-      select(Year,Biomass_est:Sornu) %>%
-      summarise_all(funs(sum)) %>% 
-      gather(key = Species, value = Abundance, Achmi:Sornu) %>%
-      group_by(Year) %>% 
-      summarise(Div_a = sum(Abundance)/i ,Div_g = sum(Abundance>0), Div_b = 1-Div_a/Div_g,Biomass = mean(Biomass_est))
-    
-    sampled_region$scale <- i
-    sampled_region$rep <- r
-    Regional_div.fixed.ab<-rbind(Regional_div.fixed.ab,sampled_region)
-    setTxtProgressBar(pb, r)
-  }
-  close(pb)
-}
-
-save(Regional_div.fixed.ab,file = "./data/fixed_ab.RData")
-
-ggplot(filter(Regional_div.fixed.ab,Year==2014),aes(x=Div_g,y=Biomass))+
-  geom_point()+
-  geom_smooth(method='lm')+
-  facet_wrap(~scale)+
-  scale_x_log10()+
-  scale_y_log10()
-
-slopes.fixed.ab<-Regional_div.fixed.ab %>% 
-  group_by(scale,Year) %>% 
-  do(BEF_slope = lm(log(Biomass) ~ log(Div_g), data = .)) %>% 
-  tidy(BEF_slope) %>% 
-  filter(term=="log(Div_g)")
-
-R2.fixed.ab<-Regional_div.fixed.ab %>%
-  group_by(scale,Year) %>% 
-  do(BEF_slope = lm(log(Biomass) ~ log(Div_g), data = .)) %>% 
-  glance(BEF_slope) %>% 
-  select(r.squared)
-
-ggplot(slopes.fixed.ab,aes(x=scale,y = estimate, color=as.character(Year), group=Year))+
-  geom_point()+
-  #geom_line()+
-  stat_smooth(method = "gam", formula = y ~ s(x, k = 5), size = 1,se=F)+
-  #geom_smooth(method = 'lm', formula = y~poly(x,3), se = F)+
-  scale_color_discrete(name="Year")+
-  theme_bw()+
-  scale_y_continuous(breaks = seq(0,1.5,by=0.5),minor_breaks = seq(0.25,1.25,by=0.25))+
-  ylab("b")+
-  xlab("Scale m^2")+
-  removeGrid()
-ggsave("./figures/Cedar creek - BEF_scale - fixed ab.pdf", height=6,width = 8)
-
-ggplot(R2.fixed.ab,aes(x=scale,y = r.squared, color=as.character(Year), group=Year))+
-  geom_point()+
-  #geom_line()+
-  #stat_smooth(method = "gam", formula = y ~ s(x, k = 5), size = 1,se=F)+
-  #geom_smooth(method = 'lm', formula = y~poly(x,3), se = F)+
-  scale_color_discrete(name="Year")+
-  theme_bw()+
-  scale_y_continuous(breaks = seq(0,1.5,by=0.5),minor_breaks = seq(0.25,1.25,by=0.25))+
-  ylab("b")+
-  xlab("Scale m^2")+
-  removeGrid()
-
-
-#bootstrap local b####
-boot.b<-data.frame()
-reps<-5
-pb <- txtProgressBar(min = 0, max = reps, style = 3)
-for(r in 1:reps){
-  sampled_local<-Bmass %>%
-    filter(NumSp!=16) %>%
-    group_by(Year) %>% 
-    sample_n(size =length(plot_id),replace=T) %>% 
-    do(local.lm=lm(log(Biomass)~log(NumSp),data=.)) %>% 
-    tidy(local.lm) %>% 
-    filter(term=="log(NumSp)") %>% 
-    select(Year,estimate) %>% 
-    mutate(Scale=1)
-  
-  sampled.region.df<-data.frame()
-  for(i in 1:999){
-    sampled_plots<-sample(plot_id,size = 10,replace=F)
-    sampled_region_10<-Bmass %>%
-      filter(NumSp!=16) %>%
-      group_by(Year) %>% 
-      filter(Plot %in% sampled_plots) %>% 
-      left_join(Com_mat,by = "Plot") %>%
-      select(Year,Biomass:Sornu) %>%
-      summarise_each(funs(sum)) %>% 
-      gather(key = Species, value = Abundance, Achmi:Sornu) %>%
-      group_by(Year) %>% 
-      summarise(Div_a = sum(Abundance)/i ,Div_g = sum(Abundance>0), Div_b = 1-Div_a/Div_g,Biomass = mean(Biomass)) %>% 
-      mutate(Scale=10)
-    
-    sampled_plots<-sample(plot_id,size = 20,replace=F)
-    sampled_region_20<-Bmass %>%
-      filter(NumSp!=16) %>%
-      group_by(Year) %>% 
-      filter(Plot %in% sampled_plots) %>% 
-      left_join(Com_mat,by = "Plot") %>%
-      select(Year,Biomass:Sornu) %>%
-      summarise_each(funs(sum)) %>% 
-      gather(key = Species, value = Abundance, Achmi:Sornu) %>%
-      group_by(Year) %>% 
-      summarise(Div_a = sum(Abundance)/i ,Div_g = sum(Abundance>0), Div_b = 1-Div_a/Div_g,Biomass = mean(Biomass)) %>% 
-      mutate(Scale=20)
-    sampled.region.df<-bind_rows(sampled.region.df,sampled_region_10,sampled_region_20)
-  }
-  
-  sampled_region<-sampled.region.df %>% 
-    group_by(Year,Scale) %>% 
-    do(reg.lm=lm(log(Biomass)~log(Div_g),data=.)) %>% 
-    tidy(reg.lm) %>% 
-    filter(term=="log(Div_g)") %>% 
-    select(Year,estimate,Scale)
-  
-  boot.b<-bind_rows(boot.b,sampled_local,sampled_region)
-  setTxtProgressBar(pb, r)
-}
-close(pb)
-
-ggplot(boot.b,aes(x=as.character(Year),y=estimate,fill=Scale,group=interaction(Year,Scale)))+
-  geom_violin(draw_quantiles = c(0.025,0.5,0.975))+
-  theme_bw()+
-  removeGrid()+
-  scale_fill_viridis()
-ggsave("./figures/Bootstrapped local b.pdf", height=5, width=6)
-
-
-
-ggplot(Regional_div,aes(x=Div_g, y=Biomass))+
-  geom_point()+
-  facet_wrap(~scale, scales="free")+
-  geom_smooth(method = 'lm',formula = y~poly(x,2))
-
-
-
-ggplot(Regional_div,aes(x=Div_g, y=Biomass, group=scale,color=scale))+
-  #geom_point(pch=1)+
-  facet_wrap(~Year)+
-  geom_smooth(method = 'lm', se=F)+
-  scale_color_viridis()+
-  theme_bw()+
-  removeGrid()+
-  scale_x_log10()+
-  scale_y_log10()
-ggsave("./figures/Cedar creek - BEF_scale 2.pdf", height=6,width = 8)
-
-
-
-
-slopes2<-Regional_div %>% 
-  group_by(scale,Year) %>% 
-  filter(Biomass!=0) %>% 
-  do(BEF_slope = lm(log(Biomass) ~ log(Div_g), data = .)) %>% 
-  tidy(BEF_slope) %>% 
-  select(scale,Year,term,estimate) %>% 
-  spread(key = term,value=estimate)
-
-names(slopes2)<-c("scale","Year","a","b")
-
-
-plot(Biomass~Div_g,data=filter(Regional_div,scale==20,year==2012), type='n', ylim=c(0,7000), xlim=c(1,18))
-for(s in 1:20){
-  sl<-slopes2 %>% 
-    filter(Year==2012,scale==s)
-  curve(exp(sl$a[1])*x^sl$b[1],from = 1,to = 18,add=T, col=col_fun(20)[s])
-}
-
-
-
-ggplot(slopes,aes(x=scale,y = estimate, group=Year))+
-  geom_point()+
-  #geom_line()+
-  facet_grid(~Year)+
-  geom_smooth(method = 'lm', formula = y~poly(x,1), se = F, color="forestgreen")+
-  #scale_color_viridis(breaks=c(2001,2005,2010,2014))+
-  theme_bw()+
-  xlim(0,1700)+
-  scale_y_continuous(breaks = seq(0,1.5,by=0.5),minor_breaks = seq(0.25,1.25,by=0.25))+
-  ylab("BEF slope")+
-  xlab("Scale m^2")+
-  removeGrid()
-ggsave("./figures/CC BEF scale - Years - all equal b.pdf",width = 20,height=4)
-
-
-save(slopes,Regional_div,file = "./data/BEF_cedar_creek.RData")
-
+ggsave("./figures/Figure 4.pdf", height=3.5,width = 8)
